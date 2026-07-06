@@ -64,7 +64,7 @@
 		editWithBranching: async (
 			message: DatabaseMessage,
 			newContent: string,
-			newExtras?: DatabaseMessageExtra[]
+			newExtras: DatabaseMessageExtra[] | undefined
 		) => {
 			onUserAction?.();
 			await chatStore.editMessageWithBranching(message.id, newContent, newExtras);
@@ -84,14 +84,14 @@
 		editUserMessagePreserveResponses: async (
 			message: DatabaseMessage,
 			newContent: string,
-			newExtras?: DatabaseMessageExtra[]
+			newExtras: DatabaseMessageExtra[] | undefined
 		) => {
 			onUserAction?.();
 			await chatStore.editUserMessagePreserveResponses(message.id, newContent, newExtras);
 			refreshAllMessages();
 		},
 
-		regenerateWithBranching: async (message: DatabaseMessage, modelOverride?: string) => {
+		regenerateWithBranching: async (message: DatabaseMessage, modelOverride: string | undefined) => {
 			onUserAction?.();
 			await chatStore.regenerateMessageWithBranching(message.id, modelOverride);
 			refreshAllMessages();

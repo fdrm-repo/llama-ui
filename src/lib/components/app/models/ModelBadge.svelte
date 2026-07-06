@@ -27,7 +27,7 @@
 	let shouldShow = $derived(model && (modelProp !== undefined || isModelMode));
 </script>
 
-{#snippet badgeContent(triggerProps?: Record<string, unknown>)}
+{#snippet badgeContent(triggerProps: Record<string, unknown> = {})}
 	<BadgeInfo {...triggerProps ?? {}} class={className} {onclick}>
 		{#snippet icon()}
 			<Package class="h-3 w-3" />

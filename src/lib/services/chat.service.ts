@@ -1,4 +1,4 @@
-import { getAuthHeaders, getJsonHeaders } from '$lib/utils/api-headers';
+import { getAuthHeaders, getJsonHeaders, resolveApiUrl } from '$lib/utils/api-headers';
 import { formatAttachmentText } from '$lib/utils/formatters';
 import { isAbortError } from '$lib/utils/abort';
 import { streamIdentity } from '$lib/utils/stream-identity';
@@ -340,7 +340,7 @@ export class ChatService {
 			if (stream && conversationId) {
 				headers['X-Conversation-Id'] = streamIdentity(conversationId, options.model);
 			}
-			const response = await fetch(API_CHAT.COMPLETIONS, {
+			const response = await fetch(resolveApiUrl(API_CHAT.COMPLETIONS), {
 				method: 'POST',
 				headers,
 				body: JSON.stringify(requestBody),
@@ -466,7 +466,7 @@ export class ChatService {
 		if (model) body.model = model;
 
 		try {
-			const res = await fetch(API_CHAT.CONTROL, {
+			const res = await fetch(resolveApiUrl(API_CHAT.CONTROL), {
 				method: 'POST',
 				headers: getJsonHeaders(),
 				body: JSON.stringify(body)
@@ -665,7 +665,7 @@ export class ChatService {
 		}
 
 		try {
-			await fetch(API_CHAT.COMPLETIONS, {
+			await fetch(resolveApiUrl(API_CHAT.COMPLETIONS), {
 				method: 'POST',
 				headers: getJsonHeaders(),
 				body: JSON.stringify(requestBody),

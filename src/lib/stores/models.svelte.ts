@@ -10,6 +10,7 @@ import {
 	detectThinkingSupportWithReason
 } from '$lib/utils/chat-template-thinking-detector';
 import { TTLCache, getAuthHeaders } from '$lib/utils';
+import { getProviderConfig, resolveApiUrl, getJsonHeaders } from '$lib/utils/api-headers';
 import {
 	MODEL_PROPS_CACHE_TTL_MS,
 	MODEL_PROPS_CACHE_MAX_ENTRIES,
@@ -21,6 +22,8 @@ import {
 } from '$lib/constants';
 
 import { conversationsStore } from '$lib/stores/conversations.svelte';
+import { settingsStore } from '$lib/stores/settings.svelte';
+import { SETTINGS_KEYS } from '$lib/constants';
 
 /**
  * modelsStore - Reactive store for model management in both MODEL and ROUTER modes.
@@ -308,6 +311,11 @@ class ModelsStore {
 	 * Also fetches modalities for MODEL mode (single model).
 	 */
 	async fetch(force = false): Promise<void> {
+		const providerConfig = getProviderConfig();
+		if (providerConfig?.model) {
+			this.selectedModelId = providerConfig.model;
+			this.selectedModelName = providerConfig.model;
+		}
 		if (this.inflightFetch) return this.inflightFetch;
 		if (this.models.length > 0 && !force) return;
 
@@ -320,6 +328,11 @@ class ModelsStore {
 	}
 
 	private async runFetch(): Promise<void> {
+		const providerConfig = getProviderConfig();
+		if (providerConfig) {
+			await this.fetchProviderModels(providerConfig);
+			return;
+		}
 		this.loading = true;
 		this.error = null;
 
@@ -350,6 +363,68 @@ class ModelsStore {
 			this.models = [];
 			this.error = error instanceof Error ? error.message : 'Failed to load models';
 
+			throw error;
+		} finally {
+			this.loading = false;
+		}
+	}
+
+	private async fetchProviderModels(providerConfig: ReturnType<typeof getProviderConfig>): Promise<void> {
+		if (!providerConfig) return;
+
+		try {
+			this.loading = true;
+			this.error = null;
+			const url = resolveApiUrl('./v1/models');
+			const response = await fetch(url, {
+				headers: getJsonHeaders()
+			});
+
+			if (!response.ok) {
+				let bodyText = '';
+				let msg = response.statusText;
+				try {
+					bodyText = await response.text();
+					try {
+						const parsed = JSON.parse(bodyText);
+						msg = parsed?.error?.message || parsed?.message || bodyText;
+					} catch {
+						// JSON parse failed, use raw body text
+						msg = bodyText || response.statusText;
+					}
+				} catch (e) {
+					// Failed to read response body
+					msg = response.statusText;
+				}
+				throw new Error(`Failed to fetch models (${response.status}): ${msg}`);
+			}
+
+			const data = (await response.json()) as { data?: Array<{ id?: string; name?: string }> };
+			const modelItems = (data.data ?? [])
+				.filter((m) => typeof m.id === 'string' && m.id.length > 0)
+				.map((m) => ({
+					id: m.id,
+					name: m.name || m.id,
+					model: m.id,
+					modalities: null,
+					organization: null,
+					quantization: null,
+					tags: []
+				}));
+			this.models = modelItems;
+			this.routerModels = [];
+			if (modelItems.length > 0) {
+				const selectedId = providerConfig.model || modelItems[0].id;
+				this.selectedModelId = selectedId;
+				this.selectedModelName = selectedId;
+			}
+			settingsStore.updateConfig(SETTINGS_KEYS.PROVIDER_MODELS, JSON.stringify(modelItems));
+			// Persist the selected provider model into settings so chat uses it by default
+			if (this.selectedModelId) {
+				settingsStore.updateConfig(SETTINGS_KEYS.PROVIDER_MODEL, this.selectedModelId);
+			}
+		} catch (error) {
+			this.error = error instanceof Error ? error.message : 'Unknown provider error';
 			throw error;
 		} finally {
 			this.loading = false;
@@ -429,6 +504,8 @@ class ModelsStore {
 	async fetchModelProps(modelId: string): Promise<ApiLlamaCppServerProps | null> {
 		const cached = this.modelPropsCache.get(modelId);
 		if (cached) return cached;
+
+		if (getProviderConfig()) return null;
 
 		if (serverStore.isRouterMode && !this.isModelLoaded(modelId)) {
 			return null;

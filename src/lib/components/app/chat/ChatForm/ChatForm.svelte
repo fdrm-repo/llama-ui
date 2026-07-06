@@ -331,11 +331,7 @@
 		}
 	}
 
-	function handlePromptLoadStart(
-		placeholderId: string,
-		promptInfo: MCPPromptInfo,
-		args?: Record<string, string>
-	) {
+	function handlePromptLoadStart(placeholderId: string, promptInfo: MCPPromptInfo, args: Record<string, string> | undefined) {
 		// Only clear the value if the prompt was triggered by typing '/'
 		if (value.startsWith(PROMPT_TRIGGER_PREFIX)) {
 			value = '';

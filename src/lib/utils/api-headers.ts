@@ -1,5 +1,6 @@
+import { base } from '$app/paths';
 import { config } from '$lib/stores/settings.svelte';
-import { CORS_PROXY_HEADER_PREFIX, REDACTED_HEADERS } from '$lib/constants';
+import { CORS_PROXY_HEADER_PREFIX, REDACTED_HEADERS, SETTINGS_KEYS } from '$lib/constants';
 import { redactValue } from './redact';
 
 /**
@@ -8,9 +9,72 @@ import { redactValue } from './redact';
  */
 export function getAuthHeaders(): Record<string, string> {
 	const currentConfig = config();
-	const apiKey = currentConfig.apiKey?.toString().trim();
+	const providerMode = currentConfig[SETTINGS_KEYS.PROVIDER_MODE]?.toString();
+	const providerApiKey = currentConfig[SETTINGS_KEYS.PROVIDER_API_KEY]?.toString().trim();
 
+	if (providerMode === 'openai-compatible' && providerApiKey) {
+		return { Authorization: `Bearer ${providerApiKey}` };
+	}
+
+	const apiKey = currentConfig.apiKey?.toString().trim();
 	return apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
+}
+
+export function getProviderConfig() {
+	const currentConfig = config();
+	const providerMode = currentConfig[SETTINGS_KEYS.PROVIDER_MODE]?.toString();
+	if (providerMode !== 'openai-compatible') {
+		return null;
+	}
+
+	const providerName = currentConfig[SETTINGS_KEYS.PROVIDER_NAME]?.toString() || 'openrouter';
+	const baseUrl = currentConfig[SETTINGS_KEYS.PROVIDER_BASE_URL]?.toString().trim();
+	const apiKey = currentConfig[SETTINGS_KEYS.PROVIDER_API_KEY]?.toString().trim();
+	const model = currentConfig[SETTINGS_KEYS.PROVIDER_MODEL]?.toString().trim();
+
+	return {
+		providerName,
+		baseUrl: baseUrl || getDefaultProviderBaseUrl(providerName),
+		apiKey,
+		model
+	};
+}
+
+export function resolveApiUrl(path: string): string {
+	const providerConfig = getProviderConfig();
+	if (!providerConfig) {
+		const normalizedPath = path.replace(/^\.\//, '').replace(/^\/+/, '/');
+		const withLeadingSlash = normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`;
+		return normalizedPath.startsWith('http://') || normalizedPath.startsWith('https://')
+			? normalizedPath
+			: `${base}${withLeadingSlash}`;
+	}
+
+	const providerBase = providerConfig.baseUrl.replace(/\/$/, '');
+	const normalizedPath = path.replace(/^\.\//, '').replace(/^\/+/, '/');
+
+	if (normalizedPath.startsWith('/v1/') || normalizedPath.startsWith('v1/')) {
+		const relative = normalizedPath.replace(/^\/?v1\//, '/');
+		return `${providerBase}${relative.startsWith('/') ? relative : `/${relative}`}`;
+	}
+
+	const p = normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`;
+	return `${providerBase}${p}`;
+}
+
+function getDefaultProviderBaseUrl(providerName: string): string {
+	switch (providerName) {
+		case 'groq':
+			return 'https://api.groq.com/openai/v1';
+		case 'huggingface':
+			return 'https://router.huggingface.co/v1';
+		case 'together':
+			return 'https://api.together.xyz/v1';
+		case 'gemini':
+			return 'https://generativelanguage.googleapis.com/v1beta/openai/';
+		default:
+			return 'https://openrouter.ai/api/v1';
+	}
 }
 
 /**

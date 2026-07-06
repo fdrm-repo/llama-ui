@@ -1,5 +1,6 @@
 import { PropsService } from '$lib/services/props.service';
 import { ServerRole } from '$lib/enums';
+import { getProviderConfig } from '$lib/utils/api-headers';
 
 /**
  * serverStore - Server connection state, configuration, and role detection
@@ -73,6 +74,14 @@ class ServerStore {
 	async fetch(): Promise<void> {
 		if (this.fetchPromise) return this.fetchPromise;
 
+		// In provider mode, skip /props entirely - external providers don't have it
+		if (getProviderConfig()) {
+			this.props = {} as ApiLlamaCppServerProps;
+			this.error = null;
+			this.role = ServerRole.MODEL;
+			return;
+		}
+
 		this.loading = true;
 		this.error = null;
 
@@ -101,6 +110,30 @@ class ServerStore {
 		this.loading = false;
 		this.role = null;
 		this.fetchPromise = null;
+	}
+
+	fetchQuiet(): void {
+		if (getProviderConfig()) {
+			this.props = {} as ApiLlamaCppServerProps;
+			this.error = null;
+			this.role = ServerRole.MODEL;
+			return;
+		}
+
+		this.loading = true;
+		PropsService.fetch()
+			.then((props) => {
+				this.props = props;
+				this.error = null;
+				this.detectRole(props);
+			})
+			.catch((error: unknown) => {
+				this.error = error instanceof Error ? error.message : String(error);
+				console.error('Error fetching server properties:', error);
+			})
+			.finally(() => {
+				this.loading = false;
+			});
 	}
 
 	/**

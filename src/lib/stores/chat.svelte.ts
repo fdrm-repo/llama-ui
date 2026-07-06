@@ -15,7 +15,7 @@ import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { DatabaseService } from '$lib/services/database.service';
 import { ChatService } from '$lib/services/chat.service';
 import { streamIdentity } from '$lib/utils/stream-identity';
-import { getAuthHeaders } from '$lib/utils/api-headers';
+import { getAuthHeaders, getProviderConfig } from '$lib/utils/api-headers';
 import { conversationsStore } from '$lib/stores/conversations.svelte';
 import { config } from '$lib/stores/settings.svelte';
 import { agenticStore } from '$lib/stores/agentic.svelte';
@@ -202,6 +202,7 @@ class ChatStore {
 	 */
 	async probeServerStream(convId: string): Promise<ApiStreamSession | null> {
 		if (!convId) return null;
+		if (getProviderConfig()) return null;
 		let listResp: Response;
 		try {
 			// POST the one conv id we are probing
@@ -230,6 +231,7 @@ class ChatStore {
 
 	async attachServerStream(convId: string, streamId?: string): Promise<void> {
 		if (!convId) return;
+		if (getProviderConfig()) return;
 		if (this.chatStreamingStates.has(convId)) return;
 
 		// flip the spinner immediately, the user sees activity as soon as the conv becomes active.
@@ -391,7 +393,7 @@ class ChatStore {
 					const content = isAppendMode ? existingContent + streamed : streamed;
 					const reasoning = isAppendMode ? existingReasoning + streamedR : streamedR;
 					// the DB write is the source of truth, mirror to the active store only when
-					// the conv is currently displayed
+					// the conv is the one displayed right now
 					await DatabaseService.updateMessage(targetMessageId, {
 						content,
 						reasoningContent: reasoning || undefined,
@@ -436,39 +438,26 @@ class ChatStore {
 	}
 
 	async discoverActiveStream(convId: string): Promise<void> {
-		if (!convId) return;
+		if (getProviderConfig()) return;
 		if (this.chatStreamingStates.has(convId)) return;
 		if (this.chatLoadingStates.get(convId)) return;
-		// concurrency guard: another discover may already be running for this conv (typical race
-		// between mount and visibilitychange on tab switch). a second concurrent fetch on the same
-		// /v1/stream/<id> would duplicate every byte into the DB message, this guard bounces it
 		if (this.discoveringConvs.has(convId)) return;
 		this.discoveringConvs.add(convId);
 
 		try {
-			// the model is frozen at POST time, rebuild the exact conv::model identity from the
-			// persisted state so the lookup key matches what the server stored. null means a single
-			// model conv with no ::suffix, only guess from the dropdown with no persisted state
 			const localState = ChatService.getStreamState(convId);
 			const streamId = ChatService.resumeStreamIdentity(convId, localState, selectedModelName());
 
-			// primary path: ask the server which sessions exist for this identity
 			const serverTarget = await this.probeServerStream(streamId);
 			if (serverTarget) {
-				// pass the full server side identity (may carry a ::model suffix) so the GET routes
-				// straight to the owning session, no probe or fan out
 				await this.attachServerStream(convId, serverTarget.conversation_id);
 				return;
 			}
 
-			// fallback: local state remembers an interrupted byte offset for this conv, the server may
-			// still have a live session matching that identity (we just lost the bytes mid stream). retry
-			// with the frozen identity, the server probe inside attachServerStream tells us if it exists
 			if (!localState) {
 				return;
 			}
 			await this.attachServerStream(convId, streamId);
-			// if attachServerStream failed (session gone, TTL expired), clear the local state to avoid retrying forever
 			if (!this.chatStreamingStates.has(convId) && !this.chatLoadingStates.get(convId)) {
 				ChatService.clearStreamState(convId);
 			}
@@ -641,6 +630,8 @@ class ChatStore {
 		// fires before that finishes. read ids straight from the DB so the result does not depend
 		// on the store init race, and the sidebar spinners light up at first paint for every conv
 		// the user owns even if it has not been hydrated into the store yet
+		if (getProviderConfig()) return;
+
 		let ids: string[];
 		try {
 			const all = await DatabaseService.getAllConversations();

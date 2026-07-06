@@ -9,6 +9,7 @@
 	} from '$lib/components/app/settings';
 	import { config, settingsStore } from '$lib/stores/settings.svelte';
 	import {
+		SETTINGS_KEYS,
 		NUMERIC_FIELDS,
 		POSITIVE_INTEGER_FIELDS,
 		SETTINGS_CHAT_SECTIONS,
@@ -26,6 +27,8 @@
 	import { setChatSettingsConfigContext } from '$lib/contexts';
 	import { settingsReferrer } from '$lib/stores/settings-referrer.svelte';
 	import { modelsStore } from '$lib/stores/models.svelte';
+	import { serverStore } from '$lib/stores/server.svelte';
+	import { toolsStore } from '$lib/stores/tools.svelte';
 	import { isRouterMode } from '$lib/stores/server.svelte';
 	interface Props {
 		initialSection?: string;
@@ -68,6 +71,34 @@
 
 	function handleConfigChange(key: string, value: string | boolean) {
 		localConfig[key] = value;
+
+		// Persist provider-related settings immediately so the rest of the app
+		// switches to remote-provider mode without requiring a manual Save+Reload.
+		if (
+			key === SETTINGS_KEYS.PROVIDER_MODE ||
+			key === SETTINGS_KEYS.PROVIDER_NAME ||
+			key === SETTINGS_KEYS.PROVIDER_BASE_URL ||
+			key === SETTINGS_KEYS.PROVIDER_API_KEY ||
+			key === SETTINGS_KEYS.PROVIDER_MODEL
+		) {
+			settingsStore.updateConfig(
+				key as keyof SettingsConfigType,
+				value as SettingsConfigType[typeof key]
+			);
+
+			// When switching away from local mode, clear cached local server state so the app
+			// stops calling /props, /tools, /models/sse, /v1/streams/*, etc.
+			if (key === SETTINGS_KEYS.PROVIDER_MODE && value !== 'local') {
+				serverStore.clear();
+				modelsStore.clear();
+				void modelsStore.fetch(true);
+			}
+
+			// When provider model changes, refresh models list so chat picks it up
+			if (key === SETTINGS_KEYS.PROVIDER_MODEL) {
+				void modelsStore.fetch(true);
+			}
+		}
 	}
 
 	function handleReset() {

@@ -23,7 +23,7 @@
 		limitToSingleRow?: boolean;
 		onFileRemove?: (fileId: string) => void;
 		onMcpResourcePreview?: (extra: DatabaseMessageExtraMcpResource) => void;
-		onPreview?: (item: ChatAttachmentDisplayItem) => void;
+		onPreview?: (item: ChatAttachmentDisplayItem, event?: MouseEvent) => void;
 		readonly?: boolean;
 	}
 
@@ -56,22 +56,29 @@
 			}
 		};
 	}
+
+	function getMcpPromptAttachment(item: ChatAttachmentDisplayItem): DatabaseMessageExtraMcpPrompt | null {
+		if (item.attachment?.type === AttachmentType.MCP_PROMPT) {
+			return item.attachment as DatabaseMessageExtraMcpPrompt;
+		}
+
+		if (item.uploadedFile?.mcpPrompt) {
+			return {
+				type: AttachmentType.MCP_PROMPT,
+				name: item.name,
+				serverName: item.uploadedFile.mcpPrompt.serverName,
+				promptName: item.uploadedFile.mcpPrompt.promptName,
+				content: item.textContent ?? '',
+				arguments: item.uploadedFile.mcpPrompt.arguments
+			};
+		}
+
+		return null;
+	}
 </script>
 
 {#if isMcpPrompt(item)}
-	{@const mcpPrompt =
-		item.attachment?.type === AttachmentType.MCP_PROMPT
-			? (item.attachment as DatabaseMessageExtraMcpPrompt)
-			: item.uploadedFile?.mcpPrompt
-				? {
-						type: AttachmentType.MCP_PROMPT as const,
-						name: item.name,
-						serverName: item.uploadedFile.mcpPrompt.serverName,
-						promptName: item.uploadedFile.mcpPrompt.promptName,
-						content: item.textContent ?? '',
-						arguments: item.uploadedFile.mcpPrompt.arguments
-					}
-				: null}
+	{@const mcpPrompt = getMcpPromptAttachment(item)}
 	{#if mcpPrompt}
 		<ChatAttachmentsListItemMcpPrompt
 			class="max-w-[300px] min-w-[200px] flex-shrink-0 {className} {scrollClasses}"

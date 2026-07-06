@@ -9,8 +9,6 @@
 
 	import { SidebarNavigation, DialogConversationTitleUpdate } from '$lib/components/app';
 	import { DialogMcpServerRecommendations } from '$lib/components/app/dialogs';
-	import { PwaMetaTags, PwaRefreshAlert } from '$lib/components/pwa';
-	import { pwaAssetsHead } from 'virtual:pwa-assets/head';
 
 	import { chatStore } from '$lib/stores/chat.svelte';
 	import { conversationsStore } from '$lib/stores/conversations.svelte';
@@ -26,12 +24,12 @@
 	import { TOOLTIP_DELAY_DURATION } from '$lib/constants';
 	import { FAVICON_PATHS, FAVICON_SELECTORS } from '$lib/constants/pwa';
 	import { useKeyboardShortcuts } from '$lib/hooks/use-keyboard-shortcuts.svelte';
-	import { usePwa } from '$lib/hooks/use-pwa.svelte';
 	import { useMcpRecommendations } from '$lib/hooks/use-mcp-recommendations.svelte';
 	import { conversations } from '$lib/stores/conversations.svelte';
 	import { isMobile } from '$lib/stores/viewport.svelte';
 	import { theme } from '$lib/stores/theme.svelte';
 	import { buildInfoStore } from '$lib/stores/build-info.svelte';
+	import { DEMO_MODE } from '$lib/constants';
 
 	import { SETTINGS_KEYS } from '$lib/constants';
 
@@ -54,10 +52,6 @@
 	let titleUpdateCurrentTitle = $state('');
 	let titleUpdateNewTitle = $state('');
 	let titleUpdateResolve: ((value: boolean) => void) | null = null;
-
-	// Keep the hook object intact: destructuring needRefreshByStorage reads the getter once and freezes it
-	const pwa = usePwa();
-	const { needRefresh, updateServiceWorker } = pwa;
 
 	function updateFavicon() {
 		const dark = theme.isSystemDark;
@@ -180,7 +174,7 @@
 	// Initialize server properties on app load (run once)
 	$effect(() => {
 		// Only fetch if we don't already have props
-		if (!serverStore.props) {
+		if (!serverStore.props && !DEMO_MODE) {
 			untrack(() => {
 				serverStore.fetch();
 			});
@@ -279,19 +273,9 @@
 </script>
 
 <svelte:head>
-	{#if pwaAssetsHead.themeColor}
-		<meta name="theme-color" content={pwaAssetsHead.themeColor.content} />
-	{/if}
-
 	{#if config().customCss}
 		<style use:customCss></style>
 	{/if}
-
-	{#each pwaAssetsHead.links as link (link.href)}
-		<link {...link} />
-	{/each}
-
-	<PwaMetaTags />
 </svelte:head>
 
 <svelte:window onkeydown={handleKeydown} bind:innerHeight bind:innerWidth />
@@ -337,10 +321,4 @@
 	{#if showBuildVersion && buildInfoStore.value}
 		<span class="text-[10px] tabular-nums text-muted-foreground">{buildInfoStore.value}</span>
 	{/if}
-
-	<PwaRefreshAlert
-		needRefresh={$needRefresh || pwa.needRefreshByStorage}
-		forceReload={pwa.needRefreshByStorage}
-		{updateServiceWorker}
-	/>
 </div>

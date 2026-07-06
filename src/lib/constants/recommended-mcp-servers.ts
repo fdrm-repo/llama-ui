@@ -14,7 +14,7 @@ export const RECOMMENDED_MCP_SERVERS: RecommendedMCPServer[] = [
 		name: 'Exa Web Search',
 		description: 'Search the web and retrieve relevant content.',
 		url: 'https://mcp.exa.ai/mcp',
-		enabled: true,
+		enabled: false,
 		requestTimeoutSeconds: DEFAULT_MCP_CONFIG.requestTimeoutSeconds
 	},
 	{
@@ -23,7 +23,7 @@ export const RECOMMENDED_MCP_SERVERS: RecommendedMCPServer[] = [
 		description:
 			'Browse models, datasets, spaces and machine learning papers from the Hugging Face hub.',
 		url: 'https://huggingface.co/mcp',
-		enabled: true,
+		enabled: false,
 		requestTimeoutSeconds: DEFAULT_MCP_CONFIG.requestTimeoutSeconds
 	}
 ];

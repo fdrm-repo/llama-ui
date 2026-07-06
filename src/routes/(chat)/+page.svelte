@@ -6,7 +6,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { replaceState } from '$app/navigation';
-	import { APP_NAME, NEW_CHAT_PARAM } from '$lib/constants';
+	import { APP_NAME, NEW_CHAT_PARAM, DEMO_MODE } from '$lib/constants';
 
 	let qParam = $derived(page.url.searchParams.get('q'));
 	let modelParam = $derived(page.url.searchParams.get('model'));
@@ -71,13 +71,15 @@
 		conversationsStore.clearActiveConversation();
 		chatStore.clearUIState();
 
-		await modelsStore.fetch();
+		if (!DEMO_MODE) {
+			await modelsStore.fetch();
 
-		if (qParam !== null || modelParam !== null || newChatParam === 'true') {
-			await handleUrlParams();
+			if (qParam !== null || modelParam !== null || newChatParam === 'true') {
+				await handleUrlParams();
+			}
+
+			await modelsStore.ensureFirstModelSelected();
 		}
-
-		await modelsStore.ensureFirstModelSelected();
 	});
 </script>
 

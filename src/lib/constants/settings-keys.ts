@@ -8,6 +8,12 @@ export const SETTINGS_KEYS = {
 	// General
 	THEME: 'theme',
 	API_KEY: 'apiKey',
+	PROVIDER_MODE: 'providerMode',
+	PROVIDER_NAME: 'providerName',
+	PROVIDER_BASE_URL: 'providerBaseUrl',
+	PROVIDER_API_KEY: 'providerApiKey',
+	PROVIDER_MODEL: 'providerModel',
+	PROVIDER_MODELS: 'providerModels',
 	SYSTEM_MESSAGE: 'systemMessage',
 	PASTE_LONG_TEXT_TO_FILE_LEN: 'pasteLongTextToFileLen',
 	COPY_TEXT_ATTACHMENTS_AS_PLAIN_TEXT: 'copyTextAttachmentsAsPlainText',

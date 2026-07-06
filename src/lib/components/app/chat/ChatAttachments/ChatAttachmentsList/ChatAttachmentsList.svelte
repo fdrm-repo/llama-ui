@@ -50,9 +50,11 @@
 
 	let displayItems = $derived(getAttachmentDisplayItems({ uploadedFiles, attachments }));
 
-	function openPreview(item: ChatAttachmentDisplayItem, event?: MouseEvent) {
-		event?.stopPropagation();
-		event?.preventDefault();
+	function openPreview(item: ChatAttachmentDisplayItem, event: MouseEvent | undefined) {
+		if (event) {
+			event.stopPropagation();
+			event.preventDefault();
+		}
 
 		// Find the index of the clicked item among non-MCP attachments
 		const nonMcpItems = displayItems.filter((i) => !isMcpPrompt(i) && !isMcpResource(i));
@@ -83,7 +85,7 @@
 		{limitToSingleRow}
 		{onFileRemove}
 		onMcpResourcePreview={openMcpResourcePreview}
-		onPreview={(i: ChatAttachmentDisplayItem, event?: MouseEvent) => openPreview(i, event)}
+		onPreview={(i: ChatAttachmentDisplayItem, event: MouseEvent | undefined) => openPreview(i, event)}
 		{readonly}
 	/>
 {/snippet}

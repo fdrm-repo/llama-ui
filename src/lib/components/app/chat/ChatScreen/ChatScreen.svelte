@@ -38,7 +38,7 @@
 	import ChatScreenGreeting from './ChatScreenGreeting.svelte';
 	import ChatScreenActionScrollDown from './ChatScreenActionScrollDown.svelte';
 	import ChatScreenDialogsAndAlerts from './ChatScreenDialogsAndAlerts.svelte';
-	import { ROUTES } from '$lib/constants';
+	import { ROUTES, DEMO_MODE } from '$lib/constants';
 
 	let { showCenteredEmpty = false } = $props();
 
@@ -118,7 +118,7 @@
 		showDeleteDialog = false;
 	}
 
-	async function handleSendMessage(message: string, files?: ChatUploadedFile[]): Promise<boolean> {
+	async function handleSendMessage(message: string, files: ChatUploadedFile[] | undefined): Promise<boolean> {
 		const plainFiles = files ? $state.snapshot(files) : undefined;
 		const result = plainFiles
 			? await parseFilesToMessageExtras(plainFiles, activeModel.activeModelId ?? undefined)
@@ -245,7 +245,7 @@
 	}}
 />
 
-{#if isServerLoading}
+{#if isServerLoading && !DEMO_MODE}
 	<ServerLoadingSplash />
 {:else}
 	<div
@@ -282,6 +282,7 @@
 
 			<ChatScreenServerError />
 
+
 			{#if page.params.id}
 				<ChatScreenStreamResumeStatus />
 			{/if}
@@ -306,7 +307,7 @@
 
 			<ChatScreenForm
 				class="pointer-events-auto conversation-chat-form"
-				disabled={hasPropsError || isEditing()}
+				disabled={(hasPropsError && !DEMO_MODE) || isEditing()}
 				{initialMessage}
 				isLoading={isCurrentConversationLoading}
 				onFileRemove={fileUpload.handleFileRemove}

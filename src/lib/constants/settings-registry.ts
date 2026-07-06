@@ -12,7 +12,14 @@ import {
 	Database,
 	Monitor as MonitorIcon,
 	Sun,
-	Moon
+	Moon,
+	Server,
+	Cloud,
+	Bot,
+	Sparkles,
+	Globe,
+	GitBranch,
+	CircleEllipsis
 } from '@lucide/svelte';
 import type { Component } from 'svelte';
 import type {
@@ -78,6 +85,66 @@ const SETTINGS_REGISTRY: Record<string, SettingsSectionEntry> = {
 				label: 'API Key',
 				help: `Set the API Key if you are using <code> ${CLI_FLAGS.API_KEY} </code> option for the server.`,
 				defaultValue: '',
+				type: SettingsFieldType.INPUT,
+				section: SETTINGS_SECTION_SLUGS.GENERAL
+			},
+			{
+				key: SETTINGS_KEYS.PROVIDER_MODE,
+				label: 'Provider Mode',
+				help: 'Choose whether to use the local llama-server backend or a remote OpenAI-compatible provider.',
+				defaultValue: 'openai-compatible',
+				type: SettingsFieldType.SELECT,
+				section: SETTINGS_SECTION_SLUGS.GENERAL,
+				options: [
+					{ value: 'openai-compatible', label: 'OpenAI-compatible provider', icon: Cloud },
+					{ value: 'local', label: 'Local llama-server', icon: Server }
+				]
+			},
+			{
+				key: SETTINGS_KEYS.PROVIDER_NAME,
+				label: 'Provider',
+				help: 'Choose an OpenAI-compatible provider to use when Provider Mode is set to OpenAI-compatible provider.',
+				defaultValue: 'openrouter',
+				type: SettingsFieldType.SELECT,
+				section: SETTINGS_SECTION_SLUGS.GENERAL,
+				options: [
+					{ value: 'openrouter', label: 'OpenRouter', icon: Globe },
+					{ value: 'groq', label: 'Groq', icon: Bot },
+					{ value: 'huggingface', label: 'Hugging Face', icon: Sparkles },
+					{ value: 'together', label: 'Together AI', icon: GitBranch },
+					{ value: 'gemini', label: 'Gemini API', icon: CircleEllipsis },
+					{ value: 'custom', label: 'Custom', icon: Sliders }
+				]
+			},
+			{
+				key: SETTINGS_KEYS.PROVIDER_BASE_URL,
+				label: 'Provider Base URL',
+				help: 'Base URL for the provider endpoint, for example https://openrouter.ai/api/v1 or https://api.groq.com/openai/v1.',
+				defaultValue: '',
+				type: SettingsFieldType.INPUT,
+				section: SETTINGS_SECTION_SLUGS.GENERAL
+			},
+			{
+				key: SETTINGS_KEYS.PROVIDER_API_KEY,
+				label: 'Provider API Key',
+				help: 'API key used for the selected remote provider.',
+				defaultValue: '',
+				type: SettingsFieldType.INPUT,
+				section: SETTINGS_SECTION_SLUGS.GENERAL
+			},
+			{
+				key: SETTINGS_KEYS.PROVIDER_MODEL,
+				label: 'Provider Model',
+				help: 'Model identifier to use for the selected remote provider.',
+				defaultValue: '',
+				type: SettingsFieldType.INPUT,
+				section: SETTINGS_SECTION_SLUGS.GENERAL
+			},
+			{
+				key: SETTINGS_KEYS.PROVIDER_MODELS,
+				label: 'Provider Models',
+				help: 'Cached list of models fetched from the selected provider. This is updated when you refresh models.',
+				defaultValue: '[]',
 				type: SettingsFieldType.INPUT,
 				section: SETTINGS_SECTION_SLUGS.GENERAL
 			},

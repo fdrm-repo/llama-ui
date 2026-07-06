@@ -3,6 +3,7 @@ import { ToolsService } from '$lib/services/tools.service';
 import { mcpStore } from '$lib/stores/mcp.svelte';
 import { HealthCheckStatus, JsonSchemaType, ToolCallType, ToolSource } from '$lib/enums';
 import { config } from '$lib/stores/settings.svelte';
+import { getProviderConfig } from '$lib/utils/api-headers';
 import {
 	DISABLED_TOOL_KEYS_LOCALSTORAGE_KEY,
 	SANDBOX_TOOL_DEFINITION,
@@ -387,6 +388,10 @@ class ToolsStore {
 		this._toolsEndpointUnreachable = false;
 
 		try {
+			if (getProviderConfig()) {
+				this._builtinTools = [];
+				return;
+			}
 			const toolInfos = await ToolsService.list();
 			this._builtinTools = toolInfos.map((info) => info.definition);
 		} catch (err) {

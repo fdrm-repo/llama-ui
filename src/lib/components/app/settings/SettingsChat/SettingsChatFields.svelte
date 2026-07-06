@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { RotateCcw, FlaskConical } from '@lucide/svelte';
+	import { toast } from 'svelte-sonner';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Input } from '$lib/components/ui/input';
 	import Label from '$lib/components/ui/label/label.svelte';
@@ -9,7 +10,7 @@
 	import { SettingsFieldType } from '$lib/enums/settings.enums';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { serverStore } from '$lib/stores/server.svelte';
-	import { modelsStore, selectedModelName, propsCacheVersion } from '$lib/stores/models.svelte';
+	import { modelsStore, modelOptions, selectedModelName, propsCacheVersion } from '$lib/stores/models.svelte';
 	import { normalizeFloatingPoint } from '$lib/utils/precision';
 	import { SettingsChatParameterSourceIndicator } from '$lib/components/app/settings';
 	import type { Component } from 'svelte';
@@ -111,6 +112,62 @@
 					{@html field.help || SETTING_CONFIG_INFO[field.key]}
 				</p>
 			{/if}
+
+				{#if field.key === SETTINGS_KEYS.PROVIDER_MODEL}
+					<div class="mt-2">
+						<button
+							type="button"
+							class="inline-flex items-center gap-2 rounded border px-3 py-1 text-sm"
+							onclick={async () => {
+								try {
+									// Persist provider-related local settings so fetch uses them immediately
+									const updates: Partial<SettingsConfigType> = {} as any;
+									// If a provider other than 'local' is selected, ensure mode is openai-compatible
+									const localProviderName = localConfig[SETTINGS_KEYS.PROVIDER_NAME];
+									const localProviderMode = localConfig[SETTINGS_KEYS.PROVIDER_MODE];
+									if (localProviderName && localProviderName !== 'local' && localProviderMode !== 'openai-compatible') {
+										updates[SETTINGS_KEYS.PROVIDER_MODE] = 'openai-compatible';
+									}
+									updates[SETTINGS_KEYS.PROVIDER_NAME] = localConfig[SETTINGS_KEYS.PROVIDER_NAME] ?? '';
+									updates[SETTINGS_KEYS.PROVIDER_BASE_URL] = localConfig[SETTINGS_KEYS.PROVIDER_BASE_URL] ?? '';
+									updates[SETTINGS_KEYS.PROVIDER_API_KEY] = localConfig[SETTINGS_KEYS.PROVIDER_API_KEY] ?? '';
+									settingsStore.updateMultipleConfig(updates);
+									await modelsStore.fetch(true);
+									toast.success('Models fetched');
+								} catch (err) {
+									const msg = err instanceof Error ? err.message : String(err);
+									toast.error('Failed to fetch models: ' + msg);
+								}
+							}}
+							disabled={modelsStore.loading}
+						>
+							<RotateCcw class="h-4 w-4" />
+							Fetch Models
+						</button>
+					</div>
+				{/if}
+
+				{#if field.key === SETTINGS_KEYS.PROVIDER_MODEL}
+					{@const available = modelOptions()}
+					{#if available && available.length > 0}
+						<div class="mt-3">
+							<Label for="providerModelSelect" class="block text-sm font-medium mb-1">Choose fetched model</Label>
+							<select
+								id="providerModelSelect"
+								class="w-full rounded border p-2"
+								value={String(localConfig[SETTINGS_KEYS.PROVIDER_MODEL] ?? '')}
+								onchange={(e) => onConfigChange(SETTINGS_KEYS.PROVIDER_MODEL, e.currentTarget.value)}
+							>
+								<option value="">-- Select model --</option>
+								{#each available as opt (opt.id)}
+									<option value={opt.model}>{opt.name}</option>
+								{/each}
+							</select>
+						</div>
+					{:else}
+						<p class="mt-2 text-xs text-muted-foreground">No provider models cached — click Fetch Models.</p>
+					{/if}
+				{/if}
 		{:else if field.type === SettingsFieldType.TEXTAREA}
 			{#if field.label}
 				<Label for={field.key} class="block flex items-center gap-1.5 text-sm font-medium">

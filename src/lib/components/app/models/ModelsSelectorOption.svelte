@@ -153,7 +153,9 @@
 						tooltip="Unload model"
 						class="h-3 w-3 text-red-500 hover:text-red-600 [@media(pointer:coarse)]:text-amber-500 [@media(pointer:coarse)]:hover:text-amber-600"
 						onclick={(e) => {
-							e?.stopPropagation();
+							if (e) {
+								e.stopPropagation();
+							}
 							modelsStore.unloadModel(option.model);
 						}}
 					/>

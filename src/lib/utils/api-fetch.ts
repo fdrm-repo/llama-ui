@@ -1,5 +1,4 @@
-import { base } from '$app/paths';
-import { getJsonHeaders, getAuthHeaders } from './api-headers';
+import { getJsonHeaders, getAuthHeaders, resolveApiUrl } from './api-headers';
 import { UrlProtocol } from '$lib/enums';
 import { ERROR_MESSAGES, HTTP_CODE_TO_STRING } from '$lib/constants/error';
 
@@ -50,10 +49,7 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
 	const baseHeaders = authOnly ? getAuthHeaders() : getJsonHeaders();
 	const headers = { ...baseHeaders, ...customHeaders };
 
-	const url =
-		path.startsWith(UrlProtocol.HTTP) || path.startsWith(UrlProtocol.HTTPS)
-			? path
-			: `${base}${path}`;
+	const url = resolveApiUrl(path);
 
 	let response;
 	try {
@@ -94,7 +90,8 @@ export async function apiFetchWithParams<T>(
 	params: Record<string, string>,
 	options: ApiFetchOptions = {}
 ): Promise<T> {
-	const url = new URL(basePath, window.location.href);
+	const resolvedBasePath = resolveApiUrl(basePath);
+	const url = new URL(resolvedBasePath, window.location.href);
 
 	for (const [key, value] of Object.entries(params)) {
 		if (value !== undefined && value !== null) {
@@ -148,29 +145,38 @@ export async function apiPost<T, B = unknown>(
 /**
  * Parse error message from a failed response.
  * Tries to extract error message from JSON body, falls back to status text.
+ * Includes endpoint URL for debugging server errors (5xx).
  */
 async function parseErrorMessage(response: Response): Promise<string> {
+	const endpoint = new URL(response.url).pathname;
+	const isServerError = response.status >= 500;
+	let detailedMessage = '';
+
 	try {
 		const errorData = await response.json();
 		if (errorData?.error?.message) {
-			return errorData.error.message;
-		}
-		if (errorData?.error && typeof errorData.error === 'string') {
-			return errorData.error;
-		}
-		if (errorData?.message) {
-			return errorData.message;
+			detailedMessage = errorData.error.message;
+		} else if (errorData?.error && typeof errorData.error === 'string') {
+			detailedMessage = errorData.error;
+		} else if (errorData?.message) {
+			detailedMessage = errorData.message;
 		}
 	} catch {
-		// JSON parsing failed, use status text
+		// JSON parsing failed, will use status text
 	}
 
 	const httpErrorStr = HTTP_CODE_TO_STRING[response.status];
-	if (httpErrorStr) {
-		return httpErrorStr;
+	const baseMessage = httpErrorStr || `${ERROR_MESSAGES.HTTP.GENERIC}: ${response.status} ${response.statusText}`;
+
+	// For server errors (5xx), include the endpoint for debugging
+	if (isServerError && endpoint) {
+		if (detailedMessage) {
+			return `${baseMessage} on ${endpoint}: ${detailedMessage}`;
+		}
+		return `${baseMessage} on ${endpoint}`;
 	}
 
-	return `${ERROR_MESSAGES.HTTP.GENERIC}: ${response.status} ${response.statusText}`;
+	return detailedMessage || baseMessage;
 }
 
 /**
