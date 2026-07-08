@@ -1060,9 +1060,11 @@ class ChatStore {
 		if (isRouterMode()) {
 			const conversationModel = this.getConversationModel(allMessages);
 			effectiveModel = modelOverride || selectedModelName() || conversationModel;
+		} else if (getProviderConfig()) {
+			effectiveModel = modelOverride || selectedModelName() || this.getConversationModel(allMessages);
 		}
 
-		if (isRouterMode() && effectiveModel) {
+		if ((isRouterMode() || getProviderConfig()) && effectiveModel) {
 			if (!modelsStore.getModelProps(effectiveModel))
 				await modelsStore.fetchModelProps(effectiveModel);
 		}
@@ -2313,7 +2315,7 @@ class ChatStore {
 			value !== undefined && value !== null && value !== '';
 		const apiOptions: Record<string, unknown> = { stream: true, timings_per_token: true };
 
-		if (isRouterMode()) {
+		if (isRouterMode() || getProviderConfig()) {
 			const modelName = selectedModelName();
 			if (modelName) apiOptions.model = modelName;
 		}

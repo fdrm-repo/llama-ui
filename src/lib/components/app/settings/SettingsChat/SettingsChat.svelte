@@ -30,6 +30,7 @@
 	import { serverStore } from '$lib/stores/server.svelte';
 	import { toolsStore } from '$lib/stores/tools.svelte';
 	import { isRouterMode } from '$lib/stores/server.svelte';
+	import { getProviderBaseUrl } from '$lib/utils/api-headers';
 	interface Props {
 		initialSection?: string;
 		getSectionHref?: (section: SettingsSection) => string;
@@ -85,6 +86,18 @@
 				key as keyof SettingsConfigType,
 				value as SettingsConfigType[typeof key]
 			);
+
+			// Auto-fill base URL when provider changes
+			if (key === SETTINGS_KEYS.PROVIDER_NAME && typeof value === 'string') {
+				const defaultBaseUrl = getProviderBaseUrl(value);
+				if (defaultBaseUrl) {
+					localConfig[SETTINGS_KEYS.PROVIDER_BASE_URL] = defaultBaseUrl;
+					settingsStore.updateConfig(
+						SETTINGS_KEYS.PROVIDER_BASE_URL,
+						defaultBaseUrl as SettingsConfigType[typeof SETTINGS_KEYS.PROVIDER_BASE_URL]
+					);
+				}
+			}
 
 			// When switching away from local mode, clear cached local server state so the app
 			// stops calling /props, /tools, /models/sse, /v1/streams/*, etc.

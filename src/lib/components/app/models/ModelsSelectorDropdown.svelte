@@ -94,13 +94,13 @@
 </script>
 
 <div class={['relative inline-flex flex-col items-end gap-1', className]}>
-	{#if ms.loading && ms.options.length === 0 && ms.isRouter}
+	{#if ms.loading && ms.options.length === 0 && (ms.isRouter || ms.isProvider)}
 		<div class="flex items-center gap-2 text-xs text-muted-foreground">
 			<Loader2 class="h-3.5 w-3.5 animate-spin" />
 
 			Loading models…
 		</div>
-	{:else if ms.options.length === 0 && ms.isRouter}
+	{:else if ms.options.length === 0 && (ms.isRouter || ms.isProvider)}
 		{#if currentModel}
 			<span
 				class={[
@@ -128,7 +128,7 @@
 			? Math.round(modelLoadFraction(modelsStore.getLoadProgress(triggerModel)) * 100)
 			: 0}
 
-		{#if ms.isRouter}
+		{#if ms.isRouter || ms.isProvider}
 			<DropdownMenu.Root bind:open={isOpen} onOpenChange={ms.handleOpenChange}>
 				<Tooltip.Root>
 					<Tooltip.Trigger>

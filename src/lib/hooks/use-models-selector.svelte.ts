@@ -8,6 +8,7 @@ import {
 	singleModelName
 } from '$lib/stores/models.svelte';
 import { isRouterMode } from '$lib/stores/server.svelte';
+import { getProviderConfig } from '$lib/utils/api-headers';
 import { filterModelOptions, groupModelOptions } from '$lib/components/app/models/utils';
 import type { ModelOption } from '$lib/types/models';
 
@@ -26,6 +27,7 @@ export interface UseModelsSelectorReturn {
 	readonly updating: boolean;
 	readonly activeId: string | null;
 	readonly isRouter: boolean;
+	readonly isProvider: boolean;
 	readonly serverModel: string | null;
 	readonly isHighlightedCurrentModelActive: boolean;
 	readonly isCurrentModelInCache: boolean;
@@ -63,19 +65,20 @@ export function useModelsSelector(opts: UseModelsSelectorOptions): UseModelsSele
 	const updating = $derived(modelsUpdating());
 	const activeId = $derived(selectedModelId());
 	const isRouter = $derived(isRouterMode());
+	const isProvider = $derived(getProviderConfig() !== null);
 	const serverModel = $derived(singleModelName());
 
 	const currentModel = $derived(opts.currentModel());
 	const onModelChange = $derived(opts.onModelChange?.());
 
 	const isHighlightedCurrentModelActive = $derived.by(() => {
-		if (!isRouter || !currentModel) return false;
+		if (!isRouter && !isProvider) return false;
 		const currentOption = options.find((option) => option.model === currentModel);
 		return currentOption ? currentOption.id === activeId : false;
 	});
 
 	const isCurrentModelInCache = $derived.by(() => {
-		if (!isRouter || !currentModel) return true;
+		if (!isRouter && !isProvider) return true;
 		return options.some((option) => option.model === currentModel);
 	});
 
@@ -104,11 +107,14 @@ export function useModelsSelector(opts: UseModelsSelectorOptions): UseModelsSele
 	function handleOpenChange(open: boolean) {
 		if (loading || updating) return;
 
-		if (isRouter) {
+		if (isRouter || isProvider) {
 			searchTerm = '';
 
 			if (open) {
 				modelsStore.fetchRouterModels().then(() => {
+					if (isProvider) {
+						void modelsStore.fetch();
+					}
 					modelsStore.fetchModalitiesForLoadedModels();
 				});
 			}
@@ -158,7 +164,7 @@ export function useModelsSelector(opts: UseModelsSelectorOptions): UseModelsSele
 	}
 
 	function getDisplayOption(): ModelOption | undefined {
-		if (!isRouter) {
+		if (!isRouter && !isProvider) {
 			const displayModel = serverModel || currentModel;
 
 			if (displayModel) {
@@ -212,6 +218,10 @@ export function useModelsSelector(opts: UseModelsSelectorOptions): UseModelsSele
 
 		get isRouter() {
 			return isRouter;
+		},
+
+		get isProvider() {
+			return isProvider;
 		},
 
 		get serverModel() {

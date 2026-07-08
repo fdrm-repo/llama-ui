@@ -209,6 +209,11 @@ class ModelsStore {
 	 */
 
 	isModelLoaded(modelId: string): boolean {
+		const providerConfig = getProviderConfig();
+		if (providerConfig) {
+			return this.models.some((m) => m.model === modelId);
+		}
+
 		const model = this.routerModels.find((m) => m.id === modelId);
 
 		return (
@@ -941,6 +946,7 @@ class ModelsStore {
 	}
 
 	async loadModel(modelId: string): Promise<void> {
+		if (getProviderConfig()) return;
 		if (this.isModelLoaded(modelId)) return;
 		if (this.modelLoadingStates.get(modelId)) return;
 
@@ -968,6 +974,7 @@ class ModelsStore {
 	}
 
 	async unloadModel(modelId: string): Promise<void> {
+		if (getProviderConfig()) return;
 		if (!this.isModelLoaded(modelId)) return;
 		if (this.modelLoadingStates.get(modelId)) return;
 

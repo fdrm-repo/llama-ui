@@ -1,4 +1,4 @@
-import { getAuthHeaders, getJsonHeaders, resolveApiUrl } from '$lib/utils/api-headers';
+import { getAuthHeaders, getJsonHeaders, getProviderConfig, resolveApiUrl } from '$lib/utils/api-headers';
 import { formatAttachmentText } from '$lib/utils/formatters';
 import { isAbortError } from '$lib/utils/abort';
 import { streamIdentity } from '$lib/utils/stream-identity';
@@ -60,6 +60,10 @@ function getAudioInputFormat(mimeType: string): AudioInputFormat {
 	return FileTypeAudio.MP3;
 }
 
+function isProviderMode(): boolean {
+	return getProviderConfig() !== null;
+}
+
 interface ResumableStreamState {
 	bytesReceived: number;
 	updatedAt: number;
@@ -71,6 +75,66 @@ interface ResumableStreamState {
 
 function streamStorageKey(conversationId: string): string {
 	return STREAM_RESUME_LOCALSTORAGE_KEY_PREFIX + conversationId;
+}
+
+const REASONING_START_TAG = '<think>';
+const REASONING_END_TAG = '</think>';
+const REASONING_START_LEN = REASONING_START_TAG.length;
+const REASONING_END_LEN = REASONING_END_TAG.length;
+
+interface ReasoningExtractionResult {
+	content: string;
+	reasoning: string;
+	inThinkingBlock: boolean;
+	newThinkingBuffer: string;
+}
+
+function processReasoningFromContent(
+	text: string,
+	inThinkingBlock: boolean,
+	thinkingBuffer: string
+): ReasoningExtractionResult {
+	if (inThinkingBlock) {
+		const endIdx = text.indexOf(REASONING_END_TAG);
+		if (endIdx !== -1) {
+			const reasoning = thinkingBuffer + text.substring(0, endIdx);
+			const remaining = text.substring(endIdx + REASONING_END_LEN);
+			const rest = processReasoningFromContent(remaining, false, '');
+
+			return {
+				content: rest.content,
+				reasoning: reasoning + rest.reasoning,
+				inThinkingBlock: rest.inThinkingBlock,
+				newThinkingBuffer: ''
+			};
+		}
+
+		return { content: '', reasoning: '', inThinkingBlock: true, newThinkingBuffer: thinkingBuffer + text };
+	}
+
+	const startIdx = text.indexOf(REASONING_START_TAG);
+	if (startIdx === -1) {
+		return { content: text, reasoning: '', inThinkingBlock: false, newThinkingBuffer: '' };
+	}
+
+	const before = text.substring(0, startIdx);
+	const after = text.substring(startIdx + REASONING_START_LEN);
+	const endIdx = after.indexOf(REASONING_END_TAG);
+
+	if (endIdx === -1) {
+		return { content: before, reasoning: '', inThinkingBlock: true, newThinkingBuffer: after };
+	}
+
+	const thinkContent = after.substring(0, endIdx);
+	const afterEnd = after.substring(endIdx + REASONING_END_LEN);
+	const rest = processReasoningFromContent(afterEnd, false, '');
+
+	return {
+		content: before + rest.content,
+		reasoning: thinkContent + rest.reasoning,
+		inThinkingBlock: false,
+		newThinkingBuffer: ''
+	};
 }
 
 export class ChatService {
@@ -254,8 +318,6 @@ export class ChatService {
 				return mapped;
 			}),
 			stream,
-			return_progress: stream ? true : undefined,
-			sse_ping_interval: stream ? 1 : undefined,
 			tools: tools && tools.length > 0 ? tools : undefined
 		};
 
@@ -264,28 +326,32 @@ export class ChatService {
 			requestBody.model = options.model;
 		}
 
-		requestBody.reasoning_format = disableReasoningParsing
-			? ReasoningFormat.NONE
-			: ReasoningFormat.AUTO;
+		if (!isProviderMode()) {
+			requestBody.return_progress = stream ? true : undefined;
+			requestBody.sse_ping_interval = stream ? 1 : undefined;
+			requestBody.reasoning_format = disableReasoningParsing
+				? ReasoningFormat.NONE
+				: ReasoningFormat.AUTO;
 
-		const reasoningBudgetTokens =
-			enableThinking && reasoningEffort ? (REASONING_EFFORT_TOKENS[reasoningEffort] ?? -1) : -1;
+			const reasoningBudgetTokens =
+				enableThinking && reasoningEffort ? (REASONING_EFFORT_TOKENS[reasoningEffort] ?? -1) : -1;
 
-		requestBody.chat_template_kwargs = {
-			...(requestBody.chat_template_kwargs ?? {}),
-			enable_thinking: enableThinking
-		};
+			requestBody.chat_template_kwargs = {
+				...(requestBody.chat_template_kwargs ?? {}),
+				enable_thinking: enableThinking
+			};
 
-		if (reasoningBudgetTokens >= 0) {
-			requestBody.thinking_budget_tokens = reasoningBudgetTokens;
-		}
+			if (reasoningBudgetTokens >= 0) {
+				requestBody.thinking_budget_tokens = reasoningBudgetTokens;
+			}
 
-		// arms the budget sampler so reasoning can be ended at runtime via the control endpoint
-		requestBody.reasoning_control = true;
+			// arms the budget sampler so reasoning can be ended at runtime via the control endpoint
+			requestBody.reasoning_control = true;
 
-		if (continueFinalMessage) {
-			requestBody.continue_final_message = true;
-			requestBody.add_generation_prompt = false;
+			if (continueFinalMessage) {
+				requestBody.continue_final_message = true;
+				requestBody.add_generation_prompt = false;
+			}
 		}
 
 		if (temperature !== undefined) requestBody.temperature = temperature;
@@ -294,34 +360,42 @@ export class ChatService {
 			requestBody.max_tokens = max_tokens !== null && max_tokens !== 0 ? max_tokens : -1;
 		}
 
-		if (dynatemp_range !== undefined) requestBody.dynatemp_range = dynatemp_range;
-		if (dynatemp_exponent !== undefined) requestBody.dynatemp_exponent = dynatemp_exponent;
-		if (top_k !== undefined) requestBody.top_k = top_k;
-		if (top_p !== undefined) requestBody.top_p = top_p;
-		if (min_p !== undefined) requestBody.min_p = min_p;
-		if (xtc_probability !== undefined) requestBody.xtc_probability = xtc_probability;
-		if (xtc_threshold !== undefined) requestBody.xtc_threshold = xtc_threshold;
-		if (typ_p !== undefined) requestBody.typ_p = typ_p;
+		if (!isProviderMode()) {
+			if (dynatemp_range !== undefined) requestBody.dynatemp_range = dynatemp_range;
+			if (dynatemp_exponent !== undefined) requestBody.dynatemp_exponent = dynatemp_exponent;
+			if (top_k !== undefined) requestBody.top_k = top_k;
+			if (xtc_probability !== undefined) requestBody.xtc_probability = xtc_probability;
+			if (xtc_threshold !== undefined) requestBody.xtc_threshold = xtc_threshold;
+			if (typ_p !== undefined) requestBody.typ_p = typ_p;
 
-		if (repeat_last_n !== undefined) requestBody.repeat_last_n = repeat_last_n;
-		if (repeat_penalty !== undefined) requestBody.repeat_penalty = repeat_penalty;
-		if (presence_penalty !== undefined) requestBody.presence_penalty = presence_penalty;
-		if (frequency_penalty !== undefined) requestBody.frequency_penalty = frequency_penalty;
-		if (dry_multiplier !== undefined) requestBody.dry_multiplier = dry_multiplier;
-		if (dry_base !== undefined) requestBody.dry_base = dry_base;
-		if (dry_allowed_length !== undefined) requestBody.dry_allowed_length = dry_allowed_length;
-		if (dry_penalty_last_n !== undefined) requestBody.dry_penalty_last_n = dry_penalty_last_n;
+			if (repeat_last_n !== undefined) requestBody.repeat_last_n = repeat_last_n;
+			if (repeat_penalty !== undefined) requestBody.repeat_penalty = repeat_penalty;
+			if (presence_penalty !== undefined) requestBody.presence_penalty = presence_penalty;
+			if (frequency_penalty !== undefined) requestBody.frequency_penalty = frequency_penalty;
+			if (dry_multiplier !== undefined) requestBody.dry_multiplier = dry_multiplier;
+			if (dry_base !== undefined) requestBody.dry_base = dry_base;
+			if (dry_allowed_length !== undefined) requestBody.dry_allowed_length = dry_allowed_length;
+			if (dry_penalty_last_n !== undefined) requestBody.dry_penalty_last_n = dry_penalty_last_n;
 
-		if (samplers !== undefined) {
-			requestBody.samplers =
-				typeof samplers === 'string'
-					? samplers.split(';').filter((s: string) => s.trim())
-					: samplers;
+			if (samplers !== undefined) {
+				requestBody.samplers =
+					typeof samplers === 'string'
+						? samplers.split(';').filter((s: string) => s.trim())
+						: samplers;
+			}
+
+			if (backend_sampling !== undefined) requestBody.backend_sampling = backend_sampling;
+
+			if (timings_per_token !== undefined) requestBody.timings_per_token = timings_per_token;
 		}
 
-		if (backend_sampling !== undefined) requestBody.backend_sampling = backend_sampling;
-
-		if (timings_per_token !== undefined) requestBody.timings_per_token = timings_per_token;
+		// Standard params that are safe for OpenAI-compatible providers
+		if (top_p !== undefined) requestBody.top_p = top_p;
+		if (min_p !== undefined) requestBody.min_p = min_p;
+		if (!isProviderMode()) {
+			if (presence_penalty !== undefined) requestBody.presence_penalty = presence_penalty;
+			if (frequency_penalty !== undefined) requestBody.frequency_penalty = frequency_penalty;
+		}
 
 		if (custom) {
 			try {
@@ -337,9 +411,9 @@ export class ChatService {
 			// tag streaming requests with the conversation id, this single header is the opt in for the
 			// server side replay buffer and powers discoverActiveStream on tab reopen. with an explicit
 			// model the ::model suffix keeps the per model session distinct
-			if (stream && conversationId) {
-				headers['X-Conversation-Id'] = streamIdentity(conversationId, options.model);
-			}
+		if (stream && !isProviderMode() && conversationId) {
+			headers['X-Conversation-Id'] = streamIdentity(conversationId, options.model);
+		}
 			const response = await fetch(resolveApiUrl(API_CHAT.COMPLETIONS), {
 				method: 'POST',
 				headers,
@@ -750,6 +824,8 @@ export class ChatService {
 		let idEmitted = false;
 		let toolCallIndexOffset = 0;
 		let hasOpenToolCallBatch = false;
+		let inThinkingBlock = false;
+		let thinkingBuffer = '';
 
 		const finalizeOpenToolCallBatch = () => {
 			if (!hasOpenToolCallBatch) {
@@ -898,9 +974,34 @@ export class ChatService {
 
 								if (content) {
 									finalizeOpenToolCallBatch();
-									aggregatedContent += content;
-									if (!abortSignal?.aborted) {
-										onChunk?.(content);
+
+									if (!reasoningContent) {
+										const extracted = processReasoningFromContent(
+											content,
+											inThinkingBlock,
+											thinkingBuffer
+										);
+										inThinkingBlock = extracted.inThinkingBlock;
+										thinkingBuffer = extracted.newThinkingBuffer;
+
+										if (extracted.reasoning.trim()) {
+											fullReasoningContent += extracted.reasoning;
+											if (!abortSignal?.aborted) {
+												onReasoningChunk?.(extracted.reasoning);
+											}
+										}
+
+										if (extracted.content) {
+											aggregatedContent += extracted.content;
+											if (!abortSignal?.aborted) {
+												onChunk?.(extracted.content);
+											}
+										}
+									} else {
+										aggregatedContent += content;
+										if (!abortSignal?.aborted) {
+											onChunk?.(content);
+										}
 									}
 								}
 
@@ -1043,30 +1144,38 @@ export class ChatService {
 				onModel?.(responseModel);
 			}
 
-			const content = data.choices[0]?.message?.content || '';
-			const reasoningContent = data.choices[0]?.message?.reasoning_content;
-			const toolCalls = data.choices[0]?.message?.tool_calls;
+		const content = data.choices[0]?.message?.content || '';
+		const reasoningContent = data.choices[0]?.message?.reasoning_content;
+		const toolCalls = data.choices[0]?.message?.tool_calls;
 
-			let serializedToolCalls: string | undefined;
+		let serializedToolCalls: string | undefined;
 
-			if (toolCalls && toolCalls.length > 0) {
-				const mergedToolCalls = ChatService.mergeToolCallDeltas([], toolCalls);
+		if (toolCalls && toolCalls.length > 0) {
+			const mergedToolCalls = ChatService.mergeToolCallDeltas([], toolCalls);
 
-				if (mergedToolCalls.length > 0) {
-					serializedToolCalls = JSON.stringify(mergedToolCalls);
-					if (serializedToolCalls) {
-						onToolCallChunk?.(serializedToolCalls);
-					}
+			if (mergedToolCalls.length > 0) {
+				serializedToolCalls = JSON.stringify(mergedToolCalls);
+				if (serializedToolCalls) {
+					onToolCallChunk?.(serializedToolCalls);
 				}
 			}
+		}
 
-			if (!content.trim() && !serializedToolCalls) {
-				const noResponseError = new Error('No response received from server. Please try again.');
+		let finalContent = content;
+		let finalReasoning = reasoningContent || undefined;
 
-				throw noResponseError;
-			}
+		if (!reasoningContent && content) {
+			const extracted = processReasoningFromContent(content, false, '');
+			finalContent = extracted.content;
+			finalReasoning = extracted.reasoning || undefined;
+		}
 
-			onComplete?.(content, reasoningContent, undefined, serializedToolCalls);
+		if (!finalContent.trim() && !serializedToolCalls) {
+			const noResponseError = new Error('No response received from server. Please try again.');
+			throw noResponseError;
+		}
+
+		onComplete?.(finalContent, finalReasoning, undefined, serializedToolCalls);
 
 			return content;
 		} catch (error) {

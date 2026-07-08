@@ -3,16 +3,51 @@ import { config } from '$lib/stores/settings.svelte';
 import { CORS_PROXY_HEADER_PREFIX, REDACTED_HEADERS, SETTINGS_KEYS } from '$lib/constants';
 import { redactValue } from './redact';
 
+const PROVIDER_DEFAULT_BASE_URLS: Record<string, string> = {
+	openrouter: 'https://openrouter.ai/api/v1',
+	groq: 'https://api.groq.com/openai/v1',
+	huggingface: 'https://router.huggingface.co/v1',
+	together: 'https://api.together.xyz/v1',
+	gemini: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+	openai: 'https://api.openai.com/v1',
+	anthropic: 'https://api.anthropic.com/v1',
+	mistral: 'https://api.mistral.ai/v1',
+	google: 'https://generativelanguage.googleapis.com/v1beta/openai/v1',
+	deepseek: 'https://api.deepseek.com/v1',
+	qwen: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+	cohere: 'https://api.cohere.com/v1',
+	perplexity: 'https://api.perplexity.ai',
+	azure: 'https://{resource-name}.services.ai.azure.com/models',
+	bedrock: '',
+	nvidia: 'https://integrate.api.nvidia.com/v1',
+	llamacpp: 'http://localhost:8080/v1',
+	lmstudio: 'http://localhost:1234/v1',
+	ollama: 'http://localhost:11434/v1',
+	vllm: 'http://localhost:8000/v1',
+	custom: ''
+};
+
 /**
  * Get authorization headers for API requests
- * Includes Bearer token if API key is configured
+ * Includes provider-specific auth headers
  */
 export function getAuthHeaders(): Record<string, string> {
 	const currentConfig = config();
 	const providerMode = currentConfig[SETTINGS_KEYS.PROVIDER_MODE]?.toString();
+	const providerName = currentConfig[SETTINGS_KEYS.PROVIDER_NAME]?.toString() || 'openrouter';
 	const providerApiKey = currentConfig[SETTINGS_KEYS.PROVIDER_API_KEY]?.toString().trim();
 
 	if (providerMode === 'openai-compatible' && providerApiKey) {
+		if (providerName === 'anthropic') {
+			return {
+				'x-api-key': providerApiKey,
+				'anthropic-version': '2023-06-01',
+				'Content-Type': 'application/json'
+			};
+		}
+		if (providerName === 'azure') {
+			return { Authorization: `Bearer ${providerApiKey}` };
+		}
 		return { Authorization: `Bearer ${providerApiKey}` };
 	}
 
@@ -34,7 +69,7 @@ export function getProviderConfig() {
 
 	return {
 		providerName,
-		baseUrl: baseUrl || getDefaultProviderBaseUrl(providerName),
+		baseUrl: baseUrl || PROVIDER_DEFAULT_BASE_URLS[providerName] || '',
 		apiKey,
 		model
 	};
@@ -50,8 +85,19 @@ export function resolveApiUrl(path: string): string {
 			: `${base}${withLeadingSlash}`;
 	}
 
-	const providerBase = providerConfig.baseUrl.replace(/\/$/, '');
+	const { baseUrl, providerName } = providerConfig;
+	const providerBase = baseUrl.replace(/\/$/, '');
 	const normalizedPath = path.replace(/^\.\//, '').replace(/^\/+/, '/');
+
+	if (providerName === 'azure') {
+		const relative = normalizedPath.replace(/^\/?v1\//, '/');
+		return `${providerBase}${relative.startsWith('/') ? relative : `/${relative}`}`;
+	}
+
+	if (providerName === 'bedrock') {
+		const p = normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`;
+		return `${providerBase}${p}`;
+	}
 
 	if (normalizedPath.startsWith('/v1/') || normalizedPath.startsWith('v1/')) {
 		const relative = normalizedPath.replace(/^\/?v1\//, '/');
@@ -62,19 +108,8 @@ export function resolveApiUrl(path: string): string {
 	return `${providerBase}${p}`;
 }
 
-function getDefaultProviderBaseUrl(providerName: string): string {
-	switch (providerName) {
-		case 'groq':
-			return 'https://api.groq.com/openai/v1';
-		case 'huggingface':
-			return 'https://router.huggingface.co/v1';
-		case 'together':
-			return 'https://api.together.xyz/v1';
-		case 'gemini':
-			return 'https://generativelanguage.googleapis.com/v1beta/openai/';
-		default:
-			return 'https://openrouter.ai/api/v1';
-	}
+export function getProviderBaseUrl(providerName: string): string {
+	return PROVIDER_DEFAULT_BASE_URLS[providerName] || '';
 }
 
 /**
